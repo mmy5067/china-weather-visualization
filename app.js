@@ -62,84 +62,66 @@ function initMap() {
     map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/mapbox/light-v10',
-        center: [104.1954, 35.8617], // 中国中心
+        center: [104.1954, 35.8617],
         zoom: 4
     });
 
     map.on('load', function() {
-        // 添加天气数据源（初始为空）
-        map.addSource('weather-data', {
+        // 原始站点数据源 (点) - 融合两个版本的数据源
+        map.addSource('weather-data-points', {
             'type': 'geojson',
-            'data': {
-                'type': 'FeatureCollection',
-                'features': []
-            }
+            'data': { 'type': 'FeatureCollection', 'features': [] }
         });
 
-        // 添加热力图层
+        // 3D柱状图所需的多边形数据源
+        map.addSource('weather-data-polygons', {
+            'type': 'geojson',
+            'data': { 'type': 'FeatureCollection', 'features': [] }
+        });
+
+        // 温度热力图层
         map.addLayer({
-            'id': 'weather-heatmap',
+            'id': 'temperature-heatmap',
             'type': 'heatmap',
-            'source': 'weather-data',
+            'source': 'weather-data-points',
             'maxzoom': 9,
+            'layout': { 'visibility': 'visible' },
             'paint': {
-                'heatmap-weight': [
-                    'interpolate',
-                    ['linear'],
-                    ['get', 'value'],
-                    0, 0,
-                    100, 1
-                ],
-                'heatmap-intensity': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    0, 2,  // 从1改为2
-                    9, 5   // 从3改为5
-                ],
+                'heatmap-weight': ['interpolate', ['linear'], ['get', 'value'], -20, 0, 40, 1],
+                'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 2, 9, 5],
                 'heatmap-color': [
                     'interpolate',
                     ['linear'],
                     ['heatmap-density'],
-                    0, 'rgba(0,0,255,0)',      // 透明蓝色
-                    0.1, 'rgb(0,100,255)',     // 深蓝色
-                    0.3, 'rgb(0,200,255)',     // 浅蓝色
-                    0.5, 'rgb(0,255,100)',     // 绿色
-                    0.7, 'rgb(255,255,0)',     // 黄色
-                    0.9, 'rgb(255,100,0)',     // 橙色
-                    1, 'rgb(255,0,0)'          // 红色
+                    0, 'rgba(0,0,255,0)',
+                    0.1, 'rgb(0,100,255)',
+                    0.3, 'rgb(0,200,255)',
+                    0.5, 'rgb(0,255,100)',
+                    0.7, 'rgb(255,255,0)',
+                    0.9, 'rgb(255,100,0)',
+                    1, 'rgb(255,0,0)'
                 ],
-                'heatmap-radius': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    0, 5,  // 从2改为5
-                    9, 40  // 从20改为40
-                ],
-                'heatmap-opacity': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    7, 1,
-                    9, 0
-                ]
+                'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 5, 9, 40],
+                'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 1, 9, 0]
             }
         });
-
-        // 添加圆点图层（高缩放级别时显示）
+        
+        // 温度圆点图层 - 融合两个版本的样式
         map.addLayer({
-            'id': 'weather-points',
+            'id': 'temperature-points',
             'type': 'circle',
-            'source': 'weather-data',
+            'source': 'weather-data-points',
             'minzoom': 7,
+            'layout': { 'visibility': 'visible' },
             'paint': {
                 'circle-radius': [
                     'interpolate',
                     ['linear'],
                     ['zoom'],
-                    7, 3,   // 从1改为3
-                    16, 15  // 从8改为15
-                ],                'circle-color': [
+                    7, 3,
+                    16, 15
+                ],
+                'circle-color': [
                     'case',
                     ['==', ['get', 'type'], 'temperature'],
                     [
@@ -174,114 +156,91 @@ function initMap() {
                         2000,'#810040'    // 极端降水
                     ]
                 ],
-                'circle-opacity': 0.9,  // 从0.8改为0.9，增加不透明度
+                'circle-opacity': 0.9,
                 'circle-stroke-width': 1,
                 'circle-stroke-color': '#fff'
-            }        });
+            }
+        });
+
+        // 降水3D柱状图层
+        map.addLayer({
+            'id': 'precipitation-3d-bars',
+            'type': 'fill-extrusion',
+            'source': 'weather-data-polygons',
+            'layout': { 'visibility': 'none' },
+            'paint': {
+                'fill-extrusion-height': ['interpolate', ['linear'], ['get', 'value'], 0, 0, 250, 500000 ],
+                'fill-extrusion-base': 0,
+                'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'value'], 10, '#87ceeb', 50, '#4169e1', 100, '#0000cd', 200, '#000080'],
+                'fill-extrusion-opacity': 0.8
+            }
+        });
 
         setupMapInteractions();
         
         // 加载中国省份边界数据
         loadChinaProvinceData();
         
-        // 开始加载数据
         loadWeatherData();
     });
 }
 
-// 设置地图交互
+// 设置地图交互 - 融合两个版本的交互功能
 function setupMapInteractions() {
-    // 鼠标悬停效果
-    map.on('mouseenter', 'weather-points', function() {
-        map.getCanvas().style.cursor = 'pointer';
-    });
-
-    map.on('mouseleave', 'weather-points', function() {
-        map.getCanvas().style.cursor = '';
-    });
-
-    // 点击显示详情
-    map.on('click', 'weather-points', function (e) {
-        const coordinates = e.features[0].geometry.coordinates.slice();
-        const properties = e.features[0].properties;
-
+    const showSidePanel = (properties, coordinates) => {
         const stationName = properties.station || '未知站点';
         const lng = coordinates[0];
         const lat = coordinates[1];
-        const value = properties.value;
+        
+        // 查找完整的站点数据
+        const monthData = dataLoader.getDataForMonth(currentMonth);
+        const station = monthData.find(s => s.name === stationName);
+        
+        if (station) {
+            // 添加坐标信息
+            station.lng = lng;
+            station.lat = lat;
+            station.provinceName = getProvinceByGeoData(lat, lng);
+            
+            // 统一调用showStationDetails
+            showStationDetails(station);
+        } else {
+            // 如果找不到完整数据，显示基本信息
+            document.getElementById('sidePanel').classList.add('active');
+            document.getElementById('stationName').textContent = stationName;
+            document.getElementById('stationCoord').textContent = `坐标: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            document.getElementById('stationValue').textContent = '暂无详细数据';
+        }
+    };
 
-        // 打开左侧面板
-        const panel = document.getElementById('sidePanel');
-        panel.classList.add('active');
-
-        // 更新文本信息
-        document.getElementById('stationName').textContent = stationName;
-        document.getElementById('stationCoord').textContent = `坐标: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-        document.getElementById('stationValue').textContent =
-            `${currentDataType === 'temperature' ? '温度' : '降水量'}: ${value !== null ? value.toFixed(2) : '无数据'} ${currentDataType === 'temperature' ? '°C' : 'mm'}`;
-        document.getElementById('stationYear').textContent = `年份: ${currentYear}`;
-
-        // 生成全年数据
-        const tempSeries = [], precipSeries = [];
-        const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-        const monthLabels = months.map(m => `${parseInt(m)}月`);
-
-        months.forEach(m => {
-            const fullMonth = `${currentYear}-${m}`;
-            const rec = dataLoader.getDataForMonth(fullMonth)?.find(d => d.name === stationName);
-            tempSeries.push(rec?.temperature ?? null);
-            precipSeries.push(rec?.precipitation ?? null);
-        });
-
-        // 渲染温度图（折线）
-        const tempChart = echarts.init(document.getElementById('stationTempChart'));
-        tempChart.setOption({
-            tooltip: { trigger: 'axis' },
-            title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
-            xAxis: {
-                type: 'category',
-                data: monthLabels
-            },
-            yAxis: {
-                type: 'value',
-                name: '温度 (°C)'
-            },
-            series: [{
-                name: '温度',
-                type: 'line',
-                smooth: true,
-                data: tempSeries,
-                itemStyle: {
-                    color: '#ff5733'
-                }
-            }]
-        });
-
-        // 渲染降水图（柱状）
-        const rainChart = echarts.init(document.getElementById('stationRainChart'));
-        rainChart.setOption({
-            tooltip: { trigger: 'axis' },
-            title: { text: '月降雨量 (mm)', left: 'center', top: 0 },
-            xAxis: {
-                type: 'category',
-                data: monthLabels
-            },
-            yAxis: {
-                type: 'value',
-                name: '降雨量 (mm)'
-            },
-            series: [{
-                name: '降雨量',
-                type: 'bar',
-                data: precipSeries,
-                itemStyle: {
-                    color: '#3398DB'
-                }
-            }]
-        });
+    // 温度点交互
+    map.on('mouseenter', 'temperature-points', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'temperature-points', () => { map.getCanvas().style.cursor = ''; });
+    map.on('click', 'temperature-points', (e) => {
+        showSidePanel(e.features[0].properties, e.features[0].geometry.coordinates);
     });
 
-
+    // 3D柱状图交互 - 修复坐标获取问题
+    map.on('mouseenter', 'precipitation-3d-bars', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'precipitation-3d-bars', () => { map.getCanvas().style.cursor = ''; });
+    map.on('click', 'precipitation-3d-bars', (e) => {
+        // 使用center属性，如果不存在则尝试从几何中心计算
+        let coordinates = e.features[0].properties.center;
+        
+        // 如果center不存在或格式不正确，尝试计算几何中心
+        if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+            try {
+                const centroid = turf.centroid(e.features[0]);
+                coordinates = centroid.geometry.coordinates;
+            } catch (error) {
+                console.error('无法计算几何中心:', error);
+                // 使用点击位置作为备选
+                coordinates = [e.lngLat.lng, e.lngLat.lat];
+            }
+        }
+        
+        showSidePanel(e.features[0].properties, coordinates);
+    });
 }
 
 // 加载天气数据
@@ -360,43 +319,55 @@ function updateMonthSelector() {
     }
 }
 
-// 更新地图可视化
+// 更新地图可视化 - 融合两个版本的可视化逻辑
 function updateMapVisualization() {
     if (!map || !dataLoader || !currentMonth) return;
     
     const monthData = dataLoader.getDataForMonth(currentMonth);
-    
-    if (monthData.length === 0) {
+    const pointsSource = map.getSource('weather-data-points');
+    const polygonsSource = map.getSource('weather-data-polygons');
+
+    if (!monthData || monthData.length === 0) {
+        if(pointsSource) pointsSource.setData({ type: 'FeatureCollection', features: [] });
+        if(polygonsSource) polygonsSource.setData({ type: 'FeatureCollection', features: [] });
         return;
     }
-    
-    // 创建GeoJSON特征
-    const features = monthData.map(station => {
-        const value = currentDataType === 'temperature' ? 
-            station.temperature : station.precipitation;
-            
+
+    const pointFeatures = monthData.map(station => {
+        const value = currentDataType === 'temperature' ? station.temperature : station.precipitation;
         if (value === null || value === undefined) return null;
-        
         return {
             type: 'Feature',
-            geometry: {
-                type: 'Point',
-                coordinates: [station.lng, station.lat]
-            },
-            properties: {
-                value: value,
-                station: station.name,
+            geometry: { type: 'Point', coordinates: [station.lng, station.lat] },
+            properties: { 
+                value: value, 
+                station: station.name, 
+                type: currentDataType,
                 temperature: station.temperature,
                 precipitation: station.precipitation
             }
         };
     }).filter(feature => feature !== null);
-    
-    // 更新地图数据源
-    map.getSource('weather-data').setData({
-        type: 'FeatureCollection',
-        features: features
-    });
+
+    if(pointsSource) pointsSource.setData({ type: 'FeatureCollection', features: pointFeatures });
+
+    // 3D柱状图处理
+    if (currentDataType === 'precipitation') {
+        if (typeof turf === 'undefined') {
+            console.error("错误：Turf.js 库未加载！3D柱状图无法生成。");
+            if(polygonsSource) polygonsSource.setData({ type: 'FeatureCollection', features: [] });
+            return;
+        }
+
+        const polygonFeatures = pointFeatures.map(point => {
+            const buffer = turf.buffer(point, 20, { units: 'kilometers' });
+            buffer.properties = { ...point.properties, center: point.geometry.coordinates };
+            return buffer;
+        });
+        if(polygonsSource) polygonsSource.setData({ type: 'FeatureCollection', features: polygonFeatures });
+    } else {
+        if(polygonsSource) polygonsSource.setData({ type: 'FeatureCollection', features: [] });
+    }
     
     // 聚合数据并更新省份填充图层
     regionWeatherData = aggregateDataByRegion(monthData, currentDataType);
@@ -408,7 +379,7 @@ function updateMapVisualization() {
     }
 }
 
-// 动画播放 - 统一使用月份控制
+// 动画播放
 function startAnimation() {
     if (isPlaying || availableMonths.length === 0) return;
     
@@ -417,17 +388,15 @@ function startAnimation() {
     document.getElementById('pauseBtn').disabled = false;
     
     let currentIndex = availableMonths.indexOf(currentMonth);
+    if (currentIndex === -1) currentIndex = 0;
     
     animationInterval = setInterval(() => {
         currentIndex = (currentIndex + 1) % availableMonths.length;
         currentMonth = availableMonths[currentIndex];
-        
-        // 更新当前年份
         currentYear = parseInt(currentMonth.split('-')[0]);
-        
         updateMapVisualization();
         updateUI();
-    }, 1000); // 每秒切换一个月
+    }, 1000);
 }
 
 // 暂停动画
@@ -452,10 +421,9 @@ function updateUI() {
     const monthSlider = document.getElementById('monthSlider');
     if (monthSlider) {
         const currentIndex = availableMonths.indexOf(currentMonth);
-        monthSlider.value = currentIndex;
+        if (currentIndex > -1) monthSlider.value = currentIndex;
     }
     
-    // 同时更新年份显示
     const yearDisplay = document.getElementById('yearDisplay');
     if (yearDisplay) {
         yearDisplay.textContent = currentYear;
@@ -470,41 +438,61 @@ function updateUI() {
 // 初始化应用
 function initApp() {
     initMap();
-    updateLegend(); // 初始化图例
+    updateLegend();
     
-    // 设置事件监听器
     document.getElementById('playBtn').addEventListener('click', startAnimation);
     document.getElementById('pauseBtn').addEventListener('click', pauseAnimation);
-    
-    // 月份滑块事件
+
     document.getElementById('monthSlider').addEventListener('input', function(e) {
-        if (!isPlaying) {
-            const monthIndex = parseInt(e.target.value);
+        if (isPlaying) return;
+        const monthIndex = parseInt(e.target.value);
+        if (availableMonths[monthIndex]) {
             currentMonth = availableMonths[monthIndex];
             currentYear = parseInt(currentMonth.split('-')[0]);
             updateMapVisualization();
             updateUI();
         }
     });
-    
-    // 年份滑块事件 - 选择该年份的第一个月
+
     document.getElementById('yearSlider').addEventListener('input', function(e) {
-        if (!isPlaying) {
-            const selectedYear = parseInt(e.target.value);
-            const yearMonths = availableMonths.filter(month => month.startsWith(selectedYear.toString()));
-            if (yearMonths.length > 0) {
-                currentMonth = yearMonths[0];
-                currentYear = selectedYear;
-                updateMapVisualization();
-                updateUI();
-            }
+        if (isPlaying) return;
+        const selectedYear = parseInt(e.target.value);
+        const firstMonthOfYear = availableMonths.find(month => month.startsWith(selectedYear.toString()));
+        if (firstMonthOfYear) {
+            currentMonth = firstMonthOfYear; 
+            currentYear = selectedYear;
+            updateMapVisualization();
+            updateUI();
         }
-    });    
-    
-    // 数据类型切换事件
+    });
+
     document.getElementById('dataType').addEventListener('change', function(e) {
         currentDataType = e.target.value;
         updateLegend();
+        
+        if (currentDataType === 'temperature') {
+            map.setLayoutProperty('temperature-heatmap', 'visibility', 'visible');
+            map.setLayoutProperty('temperature-points', 'visibility', 'visible');
+            map.setLayoutProperty('precipitation-3d-bars', 'visibility', 'none');
+
+            // 平滑地将地图恢复到2D视角
+            map.easeTo({
+                pitch: 0,
+                bearing: 0,
+                duration: 1000 
+            });
+        } else {
+            map.setLayoutProperty('temperature-heatmap', 'visibility', 'none');
+            map.setLayoutProperty('temperature-points', 'visibility', 'none');
+            map.setLayoutProperty('precipitation-3d-bars', 'visibility', 'visible');
+
+            // 平滑地将地图倾斜到3D视角
+            map.easeTo({
+                pitch: 45,
+                bearing: -17.6,
+                duration: 1000
+            });
+        }
         
         // 重新聚合数据并更新省份图层样式
         if (Object.keys(regionWeatherData).length > 0) {
@@ -518,10 +506,10 @@ function initApp() {
         
         updateMapVisualization();
     });
+    
     document.getElementById('closePanelBtn').addEventListener('click', () => {
-    document.getElementById('sidePanel').classList.remove('active');
-});
-
+        document.getElementById('sidePanel').classList.remove('active');
+    });
 }
 
 // 当DOM加载完成时初始化应用
@@ -1161,7 +1149,11 @@ function showStationDetails(station) {
     const lat = station.lat;
     const temperature = station.temperature;
     const precipitation = station.precipitation;
-      // 更新面板内容
+    
+    // 打开侧边面板
+    document.getElementById('sidePanel').classList.add('active');
+    
+    // 更新面板内容
     document.getElementById('stationName').innerHTML = `
         <span>${stationName}</span>
         <button onclick="returnToProvinceView('${station.provinceName || getProvinceByGeoData(lat, lng)}')" 
@@ -1189,36 +1181,34 @@ function showStationDetails(station) {
         precipSeries.push(rec?.precipitation ?? null);
     });
 
-
-    // 渲染温度折线
+    // 渲染温度折线图
     renderChart('stationTempChart', {
-      tooltip: { trigger: 'axis' },
-      title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
-      xAxis: { type: 'category', data: monthLabels },
-      yAxis: { type: 'value', name: '温度 (°C)' },
-      series: [{
-        name: '温度',
-        type: 'line',
-        smooth: true,
-        data: tempSeries,
-        itemStyle: { color: '#ff5733' }
-      }]
+        tooltip: { trigger: 'axis' },
+        title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
+        xAxis: { type: 'category', data: monthLabels },
+        yAxis: { type: 'value', name: '温度 (°C)' },
+        series: [{
+            name: '温度',
+            type: 'line',
+            smooth: true,
+            data: tempSeries,
+            itemStyle: { color: '#ff5733' }
+        }]
     });
 
-    // 渲染降水柱状
+    // 渲染降水柱状图
     renderChart('stationRainChart', {
-      tooltip: { trigger: 'axis' },
-      title: { text: '月降雨量 (mm)', left: 'center', top: 0 },
-      xAxis: { type: 'category', data: monthLabels },
-      yAxis: { type: 'value', name: '降雨量 (mm)' },
-      series: [{
-        name: '降雨量',
-        type: 'bar',
-        data: precipSeries,
-        itemStyle: { color: '#3398DB' }
-      }]
+        tooltip: { trigger: 'axis' },
+        title: { text: '月降雨量 (mm)', left: 'center', top: 0 },
+        xAxis: { type: 'category', data: monthLabels },
+        yAxis: { type: 'value', name: '降雨量 (mm)' },
+        series: [{
+            name: '降雨量',
+            type: 'bar',
+            data: precipSeries,
+            itemStyle: { color: '#3398DB' }
+        }]
     });
-
 }
 
 // 返回省份视图
@@ -1294,12 +1284,13 @@ function returnToProvinceView(provinceName) {
 
 // 更新图例
 function updateLegend() {
-    const legendTitle = document.getElementById('legendTitle');
     const legend = document.getElementById('legend');
+    const legendTitle = document.getElementById('legendTitle');
     
-    if (!legend) return; // 添加null检查
+    if (!legend || !legendTitle) return;
     
     if (currentDataType === 'temperature') {
+        legendTitle.textContent = '温度图例';
         legend.innerHTML = `
             <h4>温度图例</h4>
             <div class="legend-item">
@@ -1332,15 +1323,12 @@ function updateLegend() {
             </div>
         `;
     } else {
+        legendTitle.textContent = '降水图例';
         legend.innerHTML = `
             <h4>降水图例</h4>
             <div class="legend-item">
                 <div class="legend-color" style="background: #A5F38D;"></div>
                 <span>干燥 (0mm)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: #9BBCE8;"></div>
-                <span>少雨 (25mm)</span>
             </div>
             <div class="legend-item">
                 <div class="legend-color" style="background: #90caf9;"></div>
@@ -1357,10 +1345,6 @@ function updateLegend() {
             <div class="legend-item">
                 <div class="legend-color" style="background: #112C90;"></div>
                 <span>暴雨 (300mm)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background: #461981;"></div>
-                <span>特大暴雨 (600mm)</span>
             </div>
             <div class="legend-item">
                 <div class="legend-color" style="background: #810040;"></div>

@@ -4,12 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>中国气象站数据可视化</title>
+    
+    <!-- 添加 Turf.js 支持3D柱状图 -->
+    <script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+    
     <!-- Mapbox GL JS CSS -->
     <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
     <!-- ECharts for charts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.3.3/echarts.min.js"></script>
     <!-- Mapbox GL JS -->
     <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    
     <style>
         body {
             font-family: 'Microsoft YaHei', Arial, sans-serif;
@@ -168,10 +173,11 @@
             color: #212529;
             margin-top: 5px;
         }
+        
         #sidePanel {
             position: fixed;
             top: 0;
-            left: -700px; /* 初始隐藏 */
+            left: -700px;
             width: 600px;
             height: 100%;
             background-color: #ffffff;
@@ -202,7 +208,9 @@
             font-size: 22px;
             color: #999;
             cursor: pointer;
-        }        #closePanelBtn:hover {
+        }
+        
+        #closePanelBtn:hover {
             color: #333;
         }
         
