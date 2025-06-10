@@ -174,24 +174,87 @@ function setupMapInteractions() {
     });
 
     // 点击显示详情
-    map.on('click', 'weather-points', function(e) {
+    map.on('click', 'weather-points', function (e) {
         const coordinates = e.features[0].geometry.coordinates.slice();
         const properties = e.features[0].properties;
-        
-        const popup = new mapboxgl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(`
-                <div>
-                    <h4>${properties.station || '未知站点'}</h4>
-                    <p><strong>位置:</strong> ${coordinates[1].toFixed(4)}, ${coordinates[0].toFixed(4)}</p>
-                    <p><strong>${currentDataType === 'temperature' ? '温度' : '降水量'}:</strong> 
-                       ${properties.value !== null ? properties.value.toFixed(2) : '无数据'}
-                       ${currentDataType === 'temperature' ? '°C' : 'mm'}</p>
-                    <p><strong>年份:</strong> ${currentYear}</p>
-                </div>
-            `)
-            .addTo(map);
+
+        const stationName = properties.station || '未知站点';
+        const lng = coordinates[0];
+        const lat = coordinates[1];
+        const value = properties.value;
+
+        // 打开左侧面板
+        const panel = document.getElementById('sidePanel');
+        panel.classList.add('active');
+
+        // 更新文本信息
+        document.getElementById('stationName').textContent = stationName;
+        document.getElementById('stationCoord').textContent = `坐标: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        document.getElementById('stationValue').textContent =
+            `${currentDataType === 'temperature' ? '温度' : '降水量'}: ${value !== null ? value.toFixed(2) : '无数据'} ${currentDataType === 'temperature' ? '°C' : 'mm'}`;
+        document.getElementById('stationYear').textContent = `年份: ${currentYear}`;
+
+        // 生成全年数据
+        const tempSeries = [], precipSeries = [];
+        const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+        const monthLabels = months.map(m => `${parseInt(m)}月`);
+
+        months.forEach(m => {
+            const fullMonth = `${currentYear}-${m}`;
+            const rec = dataLoader.getDataForMonth(fullMonth)?.find(d => d.name === stationName);
+            tempSeries.push(rec?.temperature ?? null);
+            precipSeries.push(rec?.precipitation ?? null);
+        });
+
+        // 渲染温度图（折线）
+        const tempChart = echarts.init(document.getElementById('stationTempChart'));
+        tempChart.setOption({
+            tooltip: { trigger: 'axis' },
+            title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
+            xAxis: {
+                type: 'category',
+                data: monthLabels
+            },
+            yAxis: {
+                type: 'value',
+                name: '温度 (°C)'
+            },
+            series: [{
+                name: '温度',
+                type: 'line',
+                smooth: true,
+                data: tempSeries,
+                itemStyle: {
+                    color: '#ff5733'
+                }
+            }]
+        });
+
+        // 渲染降水图（柱状）
+        const rainChart = echarts.init(document.getElementById('stationRainChart'));
+        rainChart.setOption({
+            tooltip: { trigger: 'axis' },
+            title: { text: '月降雨量 (mm)', left: 'center', top: 0 },
+            xAxis: {
+                type: 'category',
+                data: monthLabels
+            },
+            yAxis: {
+                type: 'value',
+                name: '降雨量 (mm)'
+            },
+            series: [{
+                name: '降雨量',
+                type: 'bar',
+                data: precipSeries,
+                itemStyle: {
+                    color: '#3398DB'
+                }
+            }]
+        });
     });
+
+
 }
 
 // 加载天气数据
@@ -414,6 +477,10 @@ function initApp() {
         currentDataType = e.target.value;
         updateMapVisualization();
     });
+    document.getElementById('closePanelBtn').addEventListener('click', () => {
+    document.getElementById('sidePanel').classList.remove('active');
+});
+
 }
 
 // 当DOM加载完成时初始化应用
