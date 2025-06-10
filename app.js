@@ -17,6 +17,18 @@ let hoveredProvinceId = null; // 悬停的省份ID
 let chinaProvincesGeoData = null; // 存储中国省份边界数据
 let stationProvinceCache = {}; // 缓存站点省份映射
 let isProvincePreprocessed = false; // 标记是否已完成省份预处理
+function renderChart(domId, option) {
+    const dom = document.getElementById(domId);
+    if (!dom) return;
+
+    // 如果该 DOM 已经绑定过实例，先销毁
+    let inst = echarts.getInstanceByDom(dom);
+    if (inst) inst.dispose();
+
+    inst = echarts.init(dom);
+    inst.setOption(option);
+    return inst;
+}
 
 // 颜色映射函数
 function getColor(value, type, min, max) {
@@ -1109,8 +1121,14 @@ function showProvinceDetails(provinceProps) {
     document.getElementById('stationValue').innerHTML = detailsHTML;
     
     // 清空图表区域，显示省份概览
-    document.getElementById('stationTempChart').innerHTML = '';
-    document.getElementById('stationRainChart').innerHTML = '';
+    ['stationTempChart', 'stationRainChart'].forEach(id => {
+        const dom = document.getElementById(id);
+        if (!dom) return;
+        const inst = echarts.getInstanceByDom(dom);
+        if (inst) inst.dispose();   // 彻底释放
+        dom.innerHTML = '';         // 再清空容器
+    });
+
 }
 
 // 飞到指定气象站
@@ -1152,71 +1170,55 @@ function showStationDetails(station) {
         </button>
     `;
     document.getElementById('stationCoord').textContent = `坐标: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    document.getElementById('stationValue').textContent = 
+    document.getElementById('stationValue').textContent =
         `${currentDataType === 'temperature' ? '温度' : '降水量'}: ${
             (currentDataType === 'temperature' ? temperature : precipitation) !== null ? 
             (currentDataType === 'temperature' ? temperature : precipitation).toFixed(2) : '无数据'
         } ${currentDataType === 'temperature' ? '°C' : 'mm'}`;
     document.getElementById('stationYear').textContent = `年份: ${currentYear}`;
-    
+
     // 生成全年数据
     const tempSeries = [], precipSeries = [];
     const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
     const monthLabels = months.map(m => `${parseInt(m)}月`);
-    
+
     months.forEach(m => {
         const fullMonth = `${currentYear}-${m}`;
         const rec = dataLoader.getDataForMonth(fullMonth)?.find(d => d.name === stationName);
         tempSeries.push(rec?.temperature ?? null);
         precipSeries.push(rec?.precipitation ?? null);
     });
-    
-    // 渲染温度图（折线）
-    const tempChart = echarts.init(document.getElementById('stationTempChart'));
-    tempChart.setOption({
-        tooltip: { trigger: 'axis' },
-        title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
-        xAxis: {
-            type: 'category',
-            data: monthLabels
-        },
-        yAxis: {
-            type: 'value',
-            name: '温度 (°C)'
-        },
-        series: [{
-            name: '温度',
-            type: 'line',
-            smooth: true,
-            data: tempSeries,
-            itemStyle: {
-                color: '#ff5733'
-            }
-        }]
+
+
+    // 渲染温度折线
+    renderChart('stationTempChart', {
+      tooltip: { trigger: 'axis' },
+      title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
+      xAxis: { type: 'category', data: monthLabels },
+      yAxis: { type: 'value', name: '温度 (°C)' },
+      series: [{
+        name: '温度',
+        type: 'line',
+        smooth: true,
+        data: tempSeries,
+        itemStyle: { color: '#ff5733' }
+      }]
     });
-    
-    // 渲染降水图（柱状）
-    const rainChart = echarts.init(document.getElementById('stationRainChart'));
-    rainChart.setOption({
-        tooltip: { trigger: 'axis' },
-        title: { text: '月降雨量 (mm)', left: 'center', top: 0 },
-        xAxis: {
-            type: 'category',
-            data: monthLabels
-        },
-        yAxis: {
-            type: 'value',
-            name: '降雨量 (mm)'
-        },
-        series: [{
-            name: '降雨量',
-            type: 'bar',
-            data: precipSeries,
-            itemStyle: {
-                color: '#3398DB'
-            }
-        }]
+
+    // 渲染降水柱状
+    renderChart('stationRainChart', {
+      tooltip: { trigger: 'axis' },
+      title: { text: '月降雨量 (mm)', left: 'center', top: 0 },
+      xAxis: { type: 'category', data: monthLabels },
+      yAxis: { type: 'value', name: '降雨量 (mm)' },
+      series: [{
+        name: '降雨量',
+        type: 'bar',
+        data: precipSeries,
+        itemStyle: { color: '#3398DB' }
+      }]
     });
+
 }
 
 // 返回省份视图
