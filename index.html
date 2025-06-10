@@ -202,11 +202,112 @@
             font-size: 22px;
             color: #999;
             cursor: pointer;
-        }
-
-        #closePanelBtn:hover {
+        }        #closePanelBtn:hover {
             color: #333;
         }
+        
+        /* 省份详情样式 */
+        .province-details {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .stat-section {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .stat-section h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+            font-size: 16px;
+        }
+        
+        .stat-section p {
+            margin: 5px 0;
+            color: #6c757d;
+        }
+        
+        .stat-section strong {
+            color: #343a40;
+        }
+        
+        .stations-section {
+            margin-top: 20px;
+        }
+        
+        .stations-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+        }
+        
+        .station-item {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .station-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .station-item:last-child {
+            border-bottom: none;
+        }
+        
+        .station-name {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 4px;
+        }
+        
+        .station-data {
+            font-size: 12px;
+            color: #6c757d;
+        }
+          .station-data span {
+            margin-right: 10px;
+        }
+        
+        /* 图例样式 */
+        .legend {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 200px;
+        }
+        
+        .legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 15px;
+            margin-right: 8px;
+            border-radius: 3px;
+        }
+        
         #floatingControls {
             position: fixed;
             bottom: 20px;
@@ -242,10 +343,43 @@
         <div id="stationTempChart" style="width: 100%; height: 260px; margin-top: 20px;"></div>
         <div id="stationRainChart" style="width: 100%; height: 220px; margin-top: 10px;"></div>
 
-    </div>
-
-        <div class="info-panel">
-            <strong>使用说明：</strong> 点击地图上的气象站点查看详细信息，使用控制面板切换数据类型和年份
+    </div>        <div class="info-panel">
+            <strong>使用说明：</strong> 
+            <br>• 悬停省份查看概览信息，点击省份查看详细统计
+            <br>• 点击地图上的气象站点查看详细信息和年度趋势图
+            <br>• 使用控制面板切换数据类型和时间
+        </div>
+          <!-- 图例 -->
+        <div class="legend" id="legend">
+            <h4 id="legendTitle">温度图例</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #020C64;"></div>
+                <span>极冷 (-30°C)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #87AFE5;"></div>
+                <span>冷 (-10°C)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #97E8AD;"></div>
+                <span>冰点 (0°C)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #F7B42D;"></div>
+                <span>温和 (10°C)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #EE6618;"></div>
+                <span>温暖 (20°C)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #D0240E;"></div>
+                <span>热 (30°C)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #50000F;"></div>
+                <span>极热 (40°C)</span>
+            </div>
         </div>
         
         <div id="map"></div>
