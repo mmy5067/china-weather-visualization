@@ -7,15 +7,15 @@ import glob
 def process_csv_files():
     """
     处理所有CSV文件，按年月组织数据
-    每个月只读取一行数据，提高处理效率
+    每个站点每月的温度取平均值，降水量做加和
     """
     csv_folder = './csv'
     output_file = 'weather_data.json'
     
     # 存储所有数据的字典，按年月组织
     weather_data = {}
-    # 记录每个站点每个月是否已有数据
-    station_month_data = {}
+    # 记录每个站点每个月的所有数据，用于计算平均值和总和
+    station_month_aggregation = {}
     
     # 获取所有CSV文件
     csv_files = glob.glob(os.path.join(csv_folder, '*.csv'))
@@ -48,11 +48,6 @@ def process_csv_files():
                     if len(date_str) >= 7:  # 确保日期格式正确
                         year_month = date_str[:7]  # 提取YYYY-MM
                         
-                        # 检查该站点该月份是否已有数据
-                        station_month_key = f"{station_id}_{year_month}"
-                        if station_month_key in station_month_data:
-                            continue  # 跳过，该站点该月份已有数据
-                        
                         # 验证数据有效性
                         lat = float(row['LATITUDE'])
                         lng = float(row['LONGITUDE'])
@@ -73,24 +68,26 @@ def process_csv_files():
                         
                         # 只保留有温度或降水数据的记录
                         if temp is not None or prcp is not None:
-                            # 初始化年月数据结构
-                            if year_month not in weather_data:
-                                weather_data[year_month] = []
+                            # 创建站点月份键
+                            station_month_key = f"{station_id}_{year_month}"
                             
-                            # 添加数据点
-                            data_point = {
-                                'station_id': station_id,
-                                'lat': lat,
-                                'lng': lng,
-                                'name': str(row['NAME']).replace('"', ''),
-                                'temperature': temp,
-                                'precipitation': prcp
-                            }
+                            # 初始化聚合数据结构
+                            if station_month_key not in station_month_aggregation:
+                                station_month_aggregation[station_month_key] = {
+                                    'station_id': station_id,
+                                    'year_month': year_month,
+                                    'lat': lat,
+                                    'lng': lng,
+                                    'name': str(row['NAME']).replace('"', ''),
+                                    'temperatures': [],
+                                    'precipitations': []
+                                }
                             
-                            weather_data[year_month].append(data_point)
-                            
-                            # 标记该站点该月份已有数据
-                            station_month_data[station_month_key] = True
+                            # 收集温度和降水数据
+                            if temp is not None:
+                                station_month_aggregation[station_month_key]['temperatures'].append(temp)
+                            if prcp is not None:
+                                station_month_aggregation[station_month_key]['precipitations'].append(prcp)
                             
                 except (ValueError, TypeError) as e:
                     # 跳过无效的数据行
@@ -104,6 +101,40 @@ def process_csv_files():
             print(f"处理文件 {csv_file} 时出错: {e}")
             continue
     
+    print("开始计算每个站点每月的平均温度和降水总和...")
+    
+    # 计算每个站点每月的平均温度和降水总和
+    for station_month_key, data in station_month_aggregation.items():
+        year_month = data['year_month']
+        
+        # 计算平均温度
+        avg_temp = None
+        if data['temperatures']:
+            avg_temp = sum(data['temperatures']) / len(data['temperatures'])
+        
+        # 计算降水总和
+        total_prcp = None
+        if data['precipitations']:
+            total_prcp = sum(data['precipitations'])
+        
+        # 只保留有温度或降水数据的记录
+        if avg_temp is not None or total_prcp is not None:
+            # 初始化年月数据结构
+            if year_month not in weather_data:
+                weather_data[year_month] = []
+            
+            # 添加聚合后的数据点
+            data_point = {
+                'station_id': data['station_id'],
+                'lat': data['lat'],
+                'lng': data['lng'],
+                'name': data['name'],
+                'temperature': avg_temp,
+                'precipitation': total_prcp
+            }
+            
+            weather_data[year_month].append(data_point)
+    
     # 按年月排序
     sorted_data = dict(sorted(weather_data.items()))
     
@@ -115,7 +146,7 @@ def process_csv_files():
             'end': max(sorted_data.keys()) if sorted_data else None
         },
         'total_records': sum(len(records) for records in sorted_data.values()),
-        'unique_stations': len(set(station_month_data.keys()))
+        'unique_stations': len(station_month_aggregation)
     }
     
     # 保存处理后的数据
