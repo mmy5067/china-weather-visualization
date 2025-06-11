@@ -183,6 +183,9 @@ function initMap() {
             }
         });        setupMapInteractions();
         
+        // 初始化图层控制状态
+        initializeLayerControls();
+        
         // 启动TWEEN动画循环
         startAnimationLoop();
         
@@ -191,6 +194,32 @@ function initMap() {
         
         loadWeatherData();
     });
+}
+
+// 初始化图层控制状态
+function initializeLayerControls() {
+    // 设置初始的图层可见性和按钮状态
+    const toggleProvinceBtn = document.getElementById('toggleProvinceBtn');
+    const toggleHeatmapBtn = document.getElementById('toggleHeatmapBtn');
+    const toggle3DBtn = document.getElementById('toggle3DBtn');
+    
+    // 默认启用省份和热力图层
+    toggleProvinceBtn.classList.add('active');
+    toggleHeatmapBtn.classList.add('active');
+    
+    // 3D图层默认关闭
+    toggle3DBtn.classList.remove('active');
+    
+    // 初始状态：温度模式，所以3D按钮禁用，热力图按钮启用
+    toggleHeatmapBtn.disabled = false;
+    toggle3DBtn.disabled = true;
+    
+    // 设置对应的图层可见性
+    map.setLayoutProperty('province-fills', 'visibility', 'visible');
+    map.setLayoutProperty('province-borders', 'visibility', 'visible');
+    map.setLayoutProperty('temperature-heatmap', 'visibility', 'visible');
+    map.setLayoutProperty('temperature-points', 'visibility', 'visible');
+    map.setLayoutProperty('precipitation-3d-bars', 'visibility', 'none');
 }
 
 // 设置地图交互 - 融合两个版本的交互功能
@@ -473,9 +502,21 @@ function initApp() {
         updateLegend();
         
         if (currentDataType === 'temperature') {
-            map.setLayoutProperty('temperature-heatmap', 'visibility', 'visible');
-            map.setLayoutProperty('temperature-points', 'visibility', 'visible');
+            // 只在对应的层开关是激活状态时显示图层
+            const heatmapBtn = document.getElementById('toggleHeatmapBtn');
+            const isHeatmapActive = heatmapBtn.classList.contains('active');
+            
+            map.setLayoutProperty('temperature-heatmap', 'visibility', isHeatmapActive ? 'visible' : 'none');
+            map.setLayoutProperty('temperature-points', 'visibility', isHeatmapActive ? 'visible' : 'none');
+            
+            // 3D图层通常在温度模式下隐藏
+            const toggle3DBtn = document.getElementById('toggle3DBtn');
+            toggle3DBtn.classList.remove('active');
+            toggle3DBtn.disabled = true; // 禁用3D按钮
             map.setLayoutProperty('precipitation-3d-bars', 'visibility', 'none');
+
+            // 启用热力图按钮
+            heatmapBtn.disabled = false;
 
             // 平滑地将地图恢复到2D视角
             map.easeTo({
@@ -484,16 +525,27 @@ function initApp() {
                 duration: 1000 
             });
         } else {
+            // 降水模式下隐藏温度相关图层
+            const heatmapBtn = document.getElementById('toggleHeatmapBtn');
+            heatmapBtn.classList.remove('active');
+            heatmapBtn.disabled = true; // 禁用热力图按钮
             map.setLayoutProperty('temperature-heatmap', 'visibility', 'none');
             map.setLayoutProperty('temperature-points', 'visibility', 'none');
-            map.setLayoutProperty('precipitation-3d-bars', 'visibility', 'visible');
+            
+            // 3D柱状图在降水模式下可显示（如果开关激活）
+            const toggle3DBtn = document.getElementById('toggle3DBtn');
+            toggle3DBtn.disabled = false; // 启用3D按钮
+            const is3DActive = toggle3DBtn.classList.contains('active');
+            map.setLayoutProperty('precipitation-3d-bars', 'visibility', is3DActive ? 'visible' : 'none');
 
-            // 平滑地将地图倾斜到3D视角
-            map.easeTo({
-                pitch: 45,
-                bearing: -17.6,
-                duration: 1000
-            });
+            if (is3DActive) {
+                // 平滑地将地图倾斜到3D视角
+                map.easeTo({
+                    pitch: 45,
+                    bearing: -17.6,
+                    duration: 1000
+                });
+            }
         }
           // 重新聚合数据并更新省份图层样式
         if (Object.keys(regionWeatherData).length > 0) {
@@ -513,6 +565,49 @@ function initApp() {
     
     document.getElementById('closePanelBtn').addEventListener('click', () => {
         document.getElementById('sidePanel').classList.remove('active');
+    });
+
+    // 图层控制按钮事件监听器
+    document.getElementById('toggleProvinceBtn').addEventListener('click', function() {
+        this.classList.toggle('active');
+        const isActive = this.classList.contains('active');
+        
+        // 切换省份填充和边界图层的可见性
+        map.setLayoutProperty('province-fills', 'visibility', isActive ? 'visible' : 'none');
+        map.setLayoutProperty('province-borders', 'visibility', isActive ? 'visible' : 'none');
+    });
+
+    document.getElementById('toggleHeatmapBtn').addEventListener('click', function() {
+        this.classList.toggle('active');
+        const isActive = this.classList.contains('active');
+        
+        // 切换热力图和点图层的可见性
+        map.setLayoutProperty('temperature-heatmap', 'visibility', isActive ? 'visible' : 'none');
+        map.setLayoutProperty('temperature-points', 'visibility', isActive ? 'visible' : 'none');
+    });
+
+    document.getElementById('toggle3DBtn').addEventListener('click', function() {
+        this.classList.toggle('active');
+        const isActive = this.classList.contains('active');
+        
+        // 切换3D柱状图图层的可见性
+        map.setLayoutProperty('precipitation-3d-bars', 'visibility', isActive ? 'visible' : 'none');
+        
+        if (isActive) {
+            // 如果启用3D图层，调整到3D视角
+            map.easeTo({
+                pitch: 45,
+                bearing: -17.6,
+                duration: 1000
+            });
+        } else {
+            // 如果禁用3D图层，恢复到2D视角
+            map.easeTo({
+                pitch: 0,
+                bearing: 0,
+                duration: 1000
+            });
+        }
     });
 }
 
@@ -1194,22 +1289,25 @@ function showStationDetails(station) {
     // 打开侧边面板
     document.getElementById('sidePanel').classList.add('active');
     
-    // 更新面板内容
+     // 更新面板内容
     document.getElementById('stationName').innerHTML = `
-        <span>${stationName}</span>
+        <span style="font-size:18px;font-weight:600;letter-spacing:1px;color:#222;">${stationName}</span>
         <button onclick="returnToProvinceView('${station.provinceName || getProvinceByGeoData(lat, lng)}')" 
-                style="margin-left: 10px; font-size: 12px; padding: 2px 8px; background: #6c757d; color: white; border: none; border-radius: 3px; cursor: pointer;">
+            class="back-province-btn"
+            title="返回省份">
+            <svg viewBox="0 0 16 16" fill="none" style="width:14px;height:14px;margin-right:4px;">
+                <path d="M10.5 3l-4 5 4 5" stroke="#1769aa" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
             返回省份
         </button>
     `;
-    document.getElementById('stationCoord').textContent = `坐标: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    document.getElementById('stationValue').textContent =
-        `${currentDataType === 'temperature' ? '温度' : '降水量'}: ${
-            (currentDataType === 'temperature' ? temperature : precipitation) !== null ? 
-            (currentDataType === 'temperature' ? temperature : precipitation).toFixed(2) : '无数据'
-        } ${currentDataType === 'temperature' ? '°C' : 'mm'}`;
-    document.getElementById('stationYear').textContent = `年份: ${currentYear}`;
-
+        document.getElementById('stationCoord').innerHTML = 
+        `<span style="color:#1769aa;">经度: <b>${lng.toFixed(4)}</b>　纬度: <b>${lat.toFixed(4)}</b></span>`;
+    document.getElementById('stationValue').innerHTML =
+        currentDataType === 'temperature'
+        ? `<span style="color:#ff5733;">当前温度: <b style="font-size:18px;">${temperature !== null ? temperature.toFixed(2) : '无数据'}</b> <span style="font-size:14px;">°C</span></span>`
+        : `<span style="color:#2196f3;">月降水量: <b style="font-size:18px;">${precipitation !== null ? precipitation.toFixed(2) : '无数据'}</b> <span style="font-size:14px;">mm</span></span>`;
+    document.getElementById('stationYear').innerHTML = `<span style="color:#1769aa;">年份: <b>${currentYear}</b></span>`;
     // 生成全年数据
     const tempSeries = [], precipSeries = [];
     const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
@@ -1223,19 +1321,31 @@ function showStationDetails(station) {
     });
 
     // 渲染温度折线图
-    renderChart('stationTempChart', {
-        tooltip: { trigger: 'axis' },
-        title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
-        xAxis: { type: 'category', data: monthLabels },
-        yAxis: { type: 'value', name: '温度 (°C)' },
-        series: [{
-            name: '温度',
-            type: 'line',
-            smooth: true,
-            data: tempSeries,
-            itemStyle: { color: '#ff5733' }
-        }]
-    });
+renderChart('stationTempChart', {
+    tooltip: { trigger: 'axis' },
+    title: { text: '月平均温度 (°C)', left: 'center', top: 0 },
+    xAxis: { type: 'category', data: monthLabels },
+    yAxis: { type: 'value', name: '温度 (°C)' },
+    visualMap: [{
+        show: false,
+        type: 'continuous',
+        seriesIndex: 0,
+        min: Math.min(...tempSeries.filter(v => v !== null)),
+        max: Math.max(...tempSeries.filter(v => v !== null)),
+        inRange: {
+            color: ['#ffe5e0', '#ffb199', '#ff0844', '#ff0000'] // 低温到高温的渐变
+        }
+    }],
+    series: [{
+        name: '温度',
+        type: 'line',
+        smooth: true,
+        data: tempSeries,
+        showSymbol: true,
+        lineStyle: { width: 3 },
+        itemStyle: { color: '#ff5733' }
+    }]
+});
 
     // 渲染降水柱状图
     renderChart('stationRainChart', {
@@ -1247,7 +1357,18 @@ function showStationDetails(station) {
             name: '降雨量',
             type: 'bar',
             data: precipSeries,
-            itemStyle: { color: '#3398DB' }
+            barWidth: 24,
+            itemStyle: {
+                borderRadius: [8, 8, 0, 0],
+                color: {
+                    type: 'linear',
+                    x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                        { offset: 0, color: '#6EC6FF' }, // 顶部浅蓝
+                        { offset: 1, color: '#1565C0' }  // 底部深蓝
+                    ]
+                }
+            }
         }]
     });
 }
@@ -1326,12 +1447,10 @@ function returnToProvinceView(provinceName) {
 // 更新图例
 function updateLegend() {
     const legend = document.getElementById('legend');
-    const legendTitle = document.getElementById('legendTitle');
     
-    if (!legend || !legendTitle) return;
+    if (!legend) return;
     
     if (currentDataType === 'temperature') {
-        legendTitle.textContent = '温度图例';
         legend.innerHTML = `
             <h4>温度图例</h4>
             <div class="legend-item">
@@ -1364,7 +1483,6 @@ function updateLegend() {
             </div>
         `;
     } else {
-        legendTitle.textContent = '降水图例';
         legend.innerHTML = `
             <h4>降水图例</h4>
             <div class="legend-item">
