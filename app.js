@@ -1555,9 +1555,7 @@ function performSmoothTransition(targetMonth) {
         updateMapVisualization();
         updateUI();
         return;
-    }
-      isTransitioning = true;
-    const transitionStartTime = performance.now();
+    }    isTransitioning = true;
     
     const currentRegionData = { ...regionWeatherData };
     const targetRegionData = nextMonthData.regionData;
@@ -1589,35 +1587,18 @@ function performSmoothTransition(targetMonth) {
                 if (tweenObject.progress > 0.6 && tweenObject.progress < 0.65) {
                     updatePointDataImmediate(nextMonthData.pointData);
                 }
-            }
-        })        .onComplete(() => {
-            // 根据当前数据类型更新最终数据
-            if (currentDataType === 'precipitation') {
-                // 对于降水模式，确保柱状图显示最终准确数据
-                updatePointDataImmediate(nextMonthData.pointData);
-            } else {
-                // 对于温度模式，如果之前没有更新，现在更新
-                updatePointDataImmediate(nextMonthData.pointData);
-            }
-            
-            // 性能监控：记录过渡时间
-            const transitionTime = performance.now() - transitionStartTime;
-            performanceMetrics.transitionCount++;
-            performanceMetrics.averageTransitionTime = 
-                (performanceMetrics.averageTransitionTime * (performanceMetrics.transitionCount - 1) + transitionTime) 
-                / performanceMetrics.transitionCount;
-            
-            // 过渡完成
+            }        })        .onComplete(() => {
+            // 过渡完成，设置最终状态
             isTransitioning = false;
             currentMonth = targetMonth;
             currentYear = parseInt(currentMonth.split('-')[0]);
             regionWeatherData = targetRegionData;
-            
-            // 确保最终状态正确
-            updateMapVisualization();
+
+            // 确保最终状态准确
+            updatePointDataImmediate(nextMonthData.pointData); 
+            updateProvinceFillLayer(regionWeatherData); 
+
             updateUI();
-            
-            // 预计算下一个月的数据
             preCalculateNextMonth();
         })
         .start();
@@ -1625,18 +1606,12 @@ function performSmoothTransition(targetMonth) {
     startAnimationLoop();
 }
 
-// 性能监控变量
-let performanceMetrics = {
-    frameCount: 0,
-    lastFpsUpdate: 0,
-    fps: 0,
-    transitionCount: 0,
-    averageTransitionTime: 0
-};
+// 柱状图更新相关变量
 
-// 优化的柱状图更新函数
+// 柱状图更新相关变量
 let polygonUpdateTimeout = null;
 
+// 统一的柱状图更新函数
 function updatePolygonsOptimized(pointFeatures, skipDebounce = false) {
     if (currentDataType !== 'precipitation' || typeof turf === 'undefined') {
         return;
@@ -1661,7 +1636,7 @@ function updatePolygonsOptimized(pointFeatures, skipDebounce = false) {
         return;
     }
     
-    // 非过渡期间使用防抖，避免频繁更新
+    // 非过渡期间使用防抖
     if (polygonUpdateTimeout) {
         clearTimeout(polygonUpdateTimeout);
     }
@@ -1669,7 +1644,7 @@ function updatePolygonsOptimized(pointFeatures, skipDebounce = false) {
     polygonUpdateTimeout = setTimeout(updatePolygons, 50);
 }
 
-// 立即更新点数据（优化版本，避免复杂插值）
+// 立即更新点数据
 function updatePointDataImmediate(pointData) {
     if (!map || !pointData) return;
     
@@ -1678,7 +1653,7 @@ function updatePointDataImmediate(pointData) {
     
     if (!pointsSource) return;
     
-    // 直接创建点特征，不进行插值
+    // 创建点特征
     const pointFeatures = pointData.map(station => {
         const value = currentDataType === 'temperature' ? station.temperature : station.precipitation;
         if (value === null || value === undefined) return null;
@@ -1695,10 +1670,11 @@ function updatePointDataImmediate(pointData) {
             }
         };
     }).filter(feature => feature !== null);
-      // 更新点数据
+    
+    // 更新点数据
     pointsSource.setData({ type: 'FeatureCollection', features: pointFeatures });
     
-    // 使用优化的柱状图更新
+    // 更新柱状图
     updatePolygonsOptimized(pointFeatures);
 }
 
@@ -1717,27 +1693,32 @@ function updatePointsWithTransition(progress) {
     
     if (!currentData || !nextData) return;
     
-    // 获取所有站点的并集
+    // 使用复合键处理重名站点
     const allStations = new Map();
+    
+    // 生成唯一键的辅助函数
+    const generateStationKey = (station) => `${station.name}|${station.lng.toFixed(6)},${station.lat.toFixed(6)}`;
     
     // 添加当前月份的站点
     currentData.forEach(station => {
-        allStations.set(station.name, { current: station, next: null });
+        const key = generateStationKey(station);
+        allStations.set(key, { current: station, next: null });
     });
     
     // 添加下个月份的站点
     nextData.forEach(station => {
-        if (allStations.has(station.name)) {
-            allStations.get(station.name).next = station;
+        const key = generateStationKey(station);
+        if (allStations.has(key)) {
+            allStations.get(key).next = station;
         } else {
-            allStations.set(station.name, { current: null, next: station });
+            allStations.set(key, { current: null, next: station });
         }
     });
     
     // 创建插值后的点特征
     const pointFeatures = [];
     
-    allStations.forEach((stationData, stationName) => {
+    allStations.forEach((stationData, stationKey) => {
         const current = stationData.current;
         const next = stationData.next;
         let station, value, coordinates;
@@ -1751,31 +1732,31 @@ function updatePointsWithTransition(progress) {
                 value = lerp(currentValue, nextValue, progress);
                 station = current;
                 coordinates = [current.lng, current.lat];
-            }        
+            }
         } else if (current && !next) {
-            // 只有当前月有数据，数据逐渐消失（不显示点）
+            // 只有当前月有数据，平滑消失
             const currentValue = currentDataType === 'temperature' ? current.temperature : current.precipitation;
             
-            if (currentValue !== null && progress < 0.8) {
-                // 只有在过渡前期显示，后期让点消失
-                value = currentValue;
+            if (currentValue !== null) {
+                value = currentValue * (1 - progress);
                 station = current;
                 coordinates = [current.lng, current.lat];
             }
         } else if (!current && next) {
-            // 只有下个月有数据，数据逐渐出现
+            // 只有下个月有数据，平滑出现
             const nextValue = currentDataType === 'temperature' ? next.temperature : next.precipitation;
             
-            if (nextValue !== null && progress > 0.2) {
-                // 只有在过渡后期显示，前期保持不显示
-                value = nextValue;
+            if (nextValue !== null) {
+                value = nextValue * progress;
                 station = next;
                 coordinates = [next.lng, next.lat];
             }
+        } else {
+            value = null;
         }
         
-        // 创建特征（只有当值有效时）
-        if (value !== null && value !== undefined && station && coordinates) {
+        // 创建特征
+        if (value !== null && value !== undefined && Math.abs(value) >= 0.001 && station && coordinates) {
             pointFeatures.push({
                 type: 'Feature',
                 geometry: { type: 'Point', coordinates: coordinates },
@@ -1785,7 +1766,7 @@ function updatePointsWithTransition(progress) {
                     type: currentDataType,
                     temperature: station.temperature,
                     precipitation: station.precipitation,
-                    isTransition: !current || !next, // 标记是否为过渡状态
+                    isTransition: !current || !next,
                     transitionProgress: progress
                 }
             });
@@ -1808,7 +1789,7 @@ function updatePointsWithTransition(progress) {
     }
 }
 
-// 更新降水柱状图的平滑过渡
+// 统一的柱状图平滑过渡函数（替代原有的updatePrecipitationBarsWithTransition和updatePolygonsOptimized）
 function updatePrecipitationBarsWithTransition(progress) {
     if (!map || !nextMonthData || currentDataType !== 'precipitation') return;
     
@@ -1822,28 +1803,31 @@ function updatePrecipitationBarsWithTransition(progress) {
     const nextData = nextMonthData.pointData;
     
     if (!currentData || !nextData) return;
-    
-    // 创建站点映射
+      // 创建站点映射 - 使用 name+坐标 的复合键以处理同名不同位置的站点
     const allStations = new Map();
+    
+    // 生成唯一键的辅助函数
+    const generateStationKey = (station) => `${station.name}|${station.lng.toFixed(6)},${station.lat.toFixed(6)}`;
     
     // 添加当前月份的站点
     currentData.forEach(station => {
-        allStations.set(station.name, { current: station, next: null });
+        const key = generateStationKey(station);
+        allStations.set(key, { current: station, next: null });
     });
     
     // 添加下个月份的站点
     nextData.forEach(station => {
-        if (allStations.has(station.name)) {
-            allStations.get(station.name).next = station;
+        const key = generateStationKey(station);
+        if (allStations.has(key)) {
+            allStations.get(key).next = station;
         } else {
-            allStations.set(station.name, { current: null, next: station });
+            allStations.set(key, { current: null, next: station });
         }
     });
     
     // 创建插值后的点特征
     const pointFeatures = [];
-    
-    allStations.forEach((stationData, stationName) => {
+      allStations.forEach((stationData, stationKey) => {
         const current = stationData.current;
         const next = stationData.next;
         let station, value, coordinates;
@@ -1859,27 +1843,28 @@ function updatePrecipitationBarsWithTransition(progress) {
                 coordinates = [current.lng, current.lat];
             }
         } else if (current && !next) {
-            // 只有当前月有数据，数据逐渐消失
+            // 只有当前月有数据，全程平滑消失 (去掉死区)
             const currentValue = current.precipitation;
             
-            if (currentValue !== null && progress < 0.8) {
-                value = currentValue * (1 - progress * 1.25); // 逐渐减小到0
+            if (currentValue !== null) {
+                value = currentValue * (1 - progress); // 从1到0全程插值
                 station = current;
                 coordinates = [current.lng, current.lat];
             }
         } else if (!current && next) {
-            // 只有下个月有数据，数据逐渐出现
+            // 只有下个月有数据，全程平滑出现 (去掉死区)
             const nextValue = next.precipitation;
             
-            if (nextValue !== null && progress >  0.2) {
-                value = nextValue * ((progress - 0.2) / 0.8); // 从0逐渐增大
+            if (nextValue !== null) {
+                value = nextValue * progress; // 从0到1全程插值
                 station = next;
                 coordinates = [next.lng, next.lat];
             }
         }
+        // current和next都为null的情况：显式跳过，不添加任何特征
         
-        // 创建特征（只有当值有效时）
-        if (value !== null && value !== undefined && value >= 0 && station && coordinates) {
+        // 创建特征（只有当值有效且大于极小阈值时）
+        if (value !== null && value !== undefined && value >= 0.1 && station && coordinates) {
             pointFeatures.push({
                 type: 'Feature',
                 geometry: { type: 'Point', coordinates: coordinates },
@@ -1896,46 +1881,31 @@ function updatePrecipitationBarsWithTransition(progress) {
         }
     });
     
-    // 更新点数据
+    // 同步更新点数据和柱状图数据，避免时序不一致
     pointsSource.setData({ type: 'FeatureCollection', features: pointFeatures });
     
-    // 使用requestAnimationFrame优化柱状图更新
-    requestAnimationFrame(() => {
-        const polygonFeatures = pointFeatures.map(point => {
-            const buffer = turf.buffer(point, 20, { units: 'kilometers' });
-            buffer.properties = { ...point.properties, center: point.geometry.coordinates };
-            return buffer;
-        });
-        
-        polygonsSource.setData({ type: 'FeatureCollection', features: polygonFeatures });
+    // 同步（非RAF）更新柱状图，避免时序错开
+    const polygonFeatures = pointFeatures.map(point => {
+        const buffer = turf.buffer(point, 20, { units: 'kilometers' });
+        buffer.properties = { ...point.properties, center: point.geometry.coordinates };
+        return buffer;
     });
+    
+    polygonsSource.setData({ type: 'FeatureCollection', features: polygonFeatures });
 }
 
-// TWEEN动画循环 - 优化版本
+// TWEEN动画循环
 let lastFrameTime = 0;
 let isAnimating = false;
 
 function animate(currentTime = 0) {
-    // 性能监控
-    performanceMetrics.frameCount++;
-    if (currentTime - performanceMetrics.lastFpsUpdate >= 1000) {
-        performanceMetrics.fps = performanceMetrics.frameCount;
-        performanceMetrics.frameCount = 0;
-        performanceMetrics.lastFpsUpdate = currentTime;
-        
-        // 在开发模式下输出性能信息
-        if (window.location.hostname === 'localhost') {
-            console.log(`Animation FPS: ${performanceMetrics.fps}, Transitions: ${performanceMetrics.transitionCount}`);
-        }
-    }
-    
-    // 限制帧率到60fps，避免过度渲染
+    // 限制帧率到60fps
     if (currentTime - lastFrameTime >= 16) {
         TWEEN.update();
         lastFrameTime = currentTime;
     }
     
-    // 只在有活动的Tween时继续动画循环
+    // 继续动画循环
     if (isTransitioning || TWEEN.getAll().length > 0) {
         requestAnimationFrame(animate);
         isAnimating = true;
