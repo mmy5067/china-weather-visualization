@@ -762,7 +762,9 @@ async function loadChinaProvinceData() {
                     ]
                 ]
             }
-        });
+        },
+        'temperature-heatmap'
+        );
           // 添加省份边界图层
         map.addLayer({
             'id': 'province-borders',
@@ -780,7 +782,9 @@ async function loadChinaProvinceData() {
                 ],
                 'line-opacity': 0.8
             }
-        });
+        },
+        'temperature-heatmap'
+        );
           // 设置省份交互
         setupProvinceInteractions();
         
